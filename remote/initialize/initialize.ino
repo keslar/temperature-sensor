@@ -1,3 +1,5 @@
+#include <Hash.h>
+
 /*
  * 
  * Remote Temperature and Humidity Sendor
@@ -8,6 +10,7 @@
 
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
+#include <MD5.h>
 #include "Adafruit_Si7021.h"
 
 #define EPROM_SIZE 1024
@@ -23,11 +26,23 @@ typedef struct SensorInfo {
 };
 
 WiFiConfig WiFiNetwork = { "senorconfig", "" };
-SensorInfo Sensor = { "Sensor", WiFi.macAddress() };
 bool APMode = false;
+
+String Password = "admin";
+
+MD5Builder md5;
+md5.begin();
+md5.add( Password );
+md5.calculate();
+String PasswordStr = md5.toString();
+
+SensorInfo Sensor = { "Sensor", WiFi.macAddress() };
 bool SensorFound = true;
 
 Adafruit_Si7021 sensor = Adafruit_Si7021();
+
+int sensorTemp;
+int sensorHumidity;
 
 void setup() {
   initHardware();
@@ -43,6 +58,11 @@ void loop() {
   } else {
     while (true);
   }
+}
+
+void readSensors() {
+  sensorTemp = sensor.readTemperature();
+  sensorHumidity = sensor.readTemperature();
 }
 
 //
@@ -95,7 +115,6 @@ void setConfig() {
     h = i;
   }
   
-
   // NULL seperates values
   EEPROM.write( h++, NULL );
 
@@ -130,6 +149,20 @@ void setConfig() {
   // NULL seperates values
   h = h + Sensor.SerialNo.length();
   EEPROM.write(  h++ , NULL );
+
+  // Write Password Digest to EEPROM
+  Serial.print( "Writing password hash to " );
+  Serial.println( PasswordStr );
+/*  for( int i=0; i <= PasswordStr.length(); i++ ) {
+    EEPROM.write( h+i, PasswordStr.charAt(i) );
+    EEPROM.write( h+i+1, NULL );
+  } */
+  // NULL seperates values
+  h = h;// + PasswordStr.length();
+  EEPROM.write(  h++ , NULL );
+  
+  // Commit changes to EEPROM
+  Serial.println( "Commiting EEPROM changes . . ." );
   EEPROM.commit();
 }
 

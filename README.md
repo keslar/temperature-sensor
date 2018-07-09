@@ -19,6 +19,7 @@ For the Arduino development you will need to install:
 - [CP2104 USB drivers](https://www.silabs.com/products/mcu/Pages/USBtoUARTBridgeVCPDrivers.aspx) on your development workstation
 - [ESP8266 Board Package](http://arduino.esp8266.com/stable/package_esp8266com_index.json) into the Arduino IDE ([howto](https://learn.adafruit.com/adafruit-feather-huzzah-esp))
 - [Adafruit Si7021 Library](https://github.com/adafruit/Adafruit_Si7021/archive/master.zip) ([howto](https://learn.adafruit.com/adafruit-si7021-temperature-plus-humidity-sensor?view=all#download-adafruit-si7021))
+- [TimedAction](http://playground.arduino.cc/Code/TimedAction) library
 
 For the webserver you will need:
 
