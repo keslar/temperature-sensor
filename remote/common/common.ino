@@ -1,24 +1,21 @@
 /*
  * 
- * Remote Temperature and Humidity Sendor
- * 
- * Initialize EEPROM and test sensor
+ * Skeleton Sketch
  * 
  */
 
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
-#include <MD5.h>
-#include "Adafruit_Si7021.h"
+#include <TimedAction.h>
+#include <Adafruit_Si7021.h>
 
 #define DEBUG
 
 #ifdef DEBUG
- #define DEBUG_PRINT(x)  Serial.println(x)
+ #define DEBUG_PRINT(x)  Serial.println (x)
 #else
  #define DEBUG_PRINT(x)
 #endif
-
 
 /* 
  *  Configuration and EEPROM settings
@@ -31,8 +28,8 @@ struct Configuration {
   // WiFi Settings
   String  ssid            = "None";
   int     ssidSize        = 32;    // max: 32
-  String  pskey             = "wifi password";
-  int     pskeySize         = 64;     // max: 64
+  String  psk             = "wifi password";
+  int     pskSize         = 64;     // max: 64
   // Device Info
   String  name            = "";
   int     nameSize        = 64;
@@ -44,66 +41,62 @@ struct Configuration {
 };
 Configuration sysconfig;
 
+// Are we in Soft AP mode
+bool APMode = false;
+
 // Sensor
-bool SensorFound = false;
 Adafruit_Si7021 sensor = Adafruit_Si7021();
 #define SENSORPOLLINTERVAL 300000
 int sensorTemp;
 int sensorHumidity;
 
+// Set web server port number to 80
+DEBUG_PRINT("Starting webserver on port" + WEBSERVER_PORT + " . . .");
+WiFiServer server(WEBSERVER_PORT);
+// Variable to store the HTTP request
+String header;
+
+// Setup Timed Action
+DEBUG_PRINT( "Registering sensor read thread . . ." );
+TimedAction = sensorThread( SENSORPOLLINTERVAL, readSensors );
+
 void setup() {
   DEBUG_PRINT("Function-Begin :: setup");
-  // Initialize any hardware
+  
+  // Load the configuration from EEPROM
+  DEBUG_PRINT("Loading configuration . . . ");
+  loadConfiguration();
+  
+  // Initialize any hardware if necessary
   DEBUG_PRINT("Initializing hardware . . .");
   initHardware();
 
-  // Clear the EEPROM
-  DEBUG_PRINT("Clearning EEPROM . . .");
-  clearConfiguration();
+  // Connect to WiFi network or start in SoftAP mode
+  DEBUG_PRINT( "Connecting to WiFi network . . ." );
 
-  // Set default values
-  sysconfig.ssid  = "SENSOR-SETUP";
-  sysconfig.pskey = "";
-  sysconfig.name  = "Unconfigured";
-  sysconfig.serialNo = WiFi.macAddress();
-  sysconfig.passwdHash = "asdflkhjsdagtad";
+  // Register timed actions
   
-  // Write deafult config to EEPROM
-  DEBUG_PRINT("Writing default values to EEPROM . . .");
-  saveConfiguration();
+  // Start Webserver
 
   DEBUG_PRINT("Function-End :: setup");
 }
 
 void loop() {
-  DEBUG_PRINT("Function-Begin :: loop");
   // put your main code here, to run repeatedly:
-  
-  if ( SensorFound ) {
-    DEBUG_PRINT( "Reading sensor values . . .");
-    readSensors();
-    Serial.print("Humidity:    "); Serial.print(sensor.readHumidity(), 2);
-    Serial.print("\tTemperature: "); Serial.println(sensor.readTemperature(), 2);
-    delay(10000);
-  } else {
-    Serial.println( "Sensor not found." );
-    while (true);
-  }
+  DEBUG_PRINT("Function-Begin :: loop");
+
   DEBUG_PRINT("Function-End :: loop");
 }
 
-//
-// Initialize Hardware Settings
-//
 void initHardware() {
- DEBUG_PRINT("Function-Begin :: initHardware");
- // put any hardware initialization code here:
+  DEBUG_PRINT("Function-Begin :: initHardware");
+  // put any hardware initialization code here:
   
- //
- // Initialize serial output
- //
- DEBUG_PRINT("Setting baudrate . . ." );
- Serial.begin(BAUDRATE);
+  //
+  // Initialize serial output
+  //
+  DEBUG_PRINT("Setting baudrate to " + BAUDRATE + " . . ." );
+  Serial.begin(BAUDRATE);
   
   // wait for serial port to open
   DEBUG_PRINT("Waiting for serial port to intialize . . .");
@@ -128,8 +121,6 @@ void initHardware() {
     Serial.println("Did not find Si7021 sensor!");
     // Hang if not found
     while (true);
-  } else {
-    SensorFound = true;
   }
   DEBUG_PRINT("Sensor found.");
 
@@ -137,49 +128,60 @@ void initHardware() {
 }
 
 void clearConfiguration() {
-  DEBUG_PRINT("Function-Begin :: clearConfiguration");
   // Clear the configuraiton from the EEPROM
 
   // Write NULLs into the EEPROM
-  Serial.println( "Clearing EEPROM . . ." );
   for( int i = 0; i < EEPROM_SIZE; i++ ) {
-    Serial.print( ".");
     EEPROM.write( i, 0x0 );
   }
-  Serial.println("#");
 
   #ifdef ESP8266_h
     EEPROM.commit();
   #endif
-  DEBUG_PRINT("Function-End :: clearConfiguration");
+
+}
+
+void loadConfiguration() {
+  // Load Configuraiton from EEPROM
+
+  int memlocation = 0;
+  
+  // Wireless SSID
+  sysconfig.ssid        = readEEPROM( memlocation, sysconfig.ssidSize );
+  memlocation = memlocation + 1 + sysconfig.ssidSize;
+  sysconfig.psk         = readEEPROM( memlocation, sysconfig.pskSize );
+  memlocation = memlocation + 1 + sysconfig.pskSize;
+  
+  // Device Info
+  sysconfig.name        = readEEPROM( memlocation, sysconfig.nameSize );
+  memlocation = memlocation + 1 + sysconfig.nameSize;
+  sysconfig.serialNo    = readEEPROM( memlocation,sysconfig.serialNoSize );
+  memlocation = memlocation + 1 + sysconfig.serialNoSize;
+  
+  // Password hash for device admin account
+  sysconfig.passwdHash  = readEEPROM( memlocation, sysconfig.passwdHashSize );
 }
 
 void saveConfiguration() {
-  DEBUG_PRINT("Function-Begin :: saveConfiguration");
   // Save the configuration to EEPROM
 
   int memlocation = 0;
   
   // Wireless config
-  DEBUG_PRINT( "Writing SSID . . ." );
   writeEEPROM( memlocation, sysconfig.ssidSize,sysconfig.ssid );
   memlocation = memlocation + 1 + sysconfig.ssidSize;
-  DEBUG_PRINT( "Writing PSK . . ." );
-  writeEEPROM( memlocation,sysconfig.pskeySize,sysconfig.pskey );
-  memlocation = memlocation + 1 + sysconfig.pskeySize;
+  writeEEPROM( memlocation,sysconfig.pskSize,sysconfig.psk );
+  memlocation = memlocation + 1 + sysconfig.pskSize;
 
   // Device Info
-  DEBUG_PRINT( "Writing sensor name . . ." );
   writeEEPROM( memlocation, sysconfig.nameSize, sysconfig.name );
   memlocation = memlocation + 1 + sysconfig.nameSize;
-  DEBUG_PRINT( "Writing serial number . . ." );
   writeEEPROM( memlocation, sysconfig.serialNoSize, sysconfig.serialNo );
   memlocation = memlocation + 1 + sysconfig.serialNoSize;
 
   // Device Admin password hash
-  DEBUG_PRINT( "Writing admin password hash . . ." );
   writeEEPROM( memlocation, sysconfig.passwdHashSize, sysconfig.passwdHash );
-  DEBUG_PRINT("Function-End :: saveConfiguration");
+  
 }
 
 String readEEPROM (int start, int size ) {
@@ -205,32 +207,20 @@ String readEEPROM (int start, int size ) {
 }
 
 void writeEEPROM( int start, int size, String value ) {
-  DEBUG_PRINT("Function-Begin :: writeEEPROM");
   // Write a value into the EEPROM
-  DEBUG_PRINT( start );
-  DEBUG_PRINT( size );
-  DEBUG_PRINT( value );
+  
   for (int i=0; i<(value.length()<size?value.length():size); i++) {
     EEPROM.write(start+i,value.charAt(i));
   }
-  
-  EEPROM.write( start + (value.length()<size?value.length():size), 0 );
+  EEPROM.write( (value.length()<size?value.length():size), 0 );
 
   #ifdef ESP8266_h
     EEPROM.commit();
   #endif
-  DEBUG_PRINT("Function-End :: writeEEPROM");
 }
-
 
 void readSensors() {
-  DEBUG_PRINT("Function-Begin :: readSensors");
-  DEBUG_PRINT( "Reading temperature sensor . . ." );
+  // Read the values from the sensors
   sensorTemp = sensor.readTemperature();
-  DEBUG_PRINT( "Reading humidity sensor . . ." );
-  sensorHumidity = sensor.readHumidity();
-  DEBUG_PRINT("Function-End :: readSensors");
+  sensorHumidity = sensor.readTemperature();
 }
-
-
-
