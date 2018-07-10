@@ -63,13 +63,15 @@ void setup() {
   // Clear the EEPROM
   DEBUG_PRINT("Clearning EEPROM . . .");
   clearConfiguration();
+  
 
   // Set default values
-  sysconfig.ssid  = "SENSOR-SETUP";
+  sysconfig.ssid = "Sensor-Setup";
   sysconfig.pskey = "";
-  sysconfig.name  = "Unconfigured";
+  sysconfig.name = "undefined";
   sysconfig.serialNo = WiFi.macAddress();
-  sysconfig.passwdHash = sha1(SALT+defaultPassword);
+  String salted = strcat(SALT,"admin");
+  sysconfig.passwdHash = sha1( salted );
   
   // Write deafult config to EEPROM
   DEBUG_PRINT("Writing default values to EEPROM . . .");
@@ -118,10 +120,8 @@ void initHardware() {
   //
   // Set the EEPROM size if using ESP8266
   //
-  #ifdef ESP8266_h
-    DEBUG_PRINT("Using ESP8266 - initializing EEPROM to " + EEPROMSIZE + " bytes . . .");
-    EEPROM.begin( EEPROM_SIZE );
-  #endif
+  DEBUG_PRINT("Using ESP8266 - initializing EEPROM to . . .");
+  EEPROM.begin( EEPROM_SIZE );
 
   //
   // Check for sensor
@@ -151,9 +151,8 @@ void clearConfiguration() {
   }
   Serial.println("#");
 
-  #ifdef ESP8266_h
-    EEPROM.commit();
-  #endif
+  EEPROM.commit();
+  
   DEBUG_PRINT("Function-End :: clearConfiguration");
 }
 
@@ -200,9 +199,7 @@ String readEEPROM (int start, int size ) {
      }
   }
 
-  #ifdef ESP8266_h
-    EEPROM.commit();
-  #endif
+  EEPROM.commit();
 
   return retString;
 }
@@ -219,9 +216,8 @@ void writeEEPROM( int start, int size, String value ) {
   
   EEPROM.write( start + (value.length()<size?value.length():size), 0 );
 
-  #ifdef ESP8266_h
-    EEPROM.commit();
-  #endif
+  EEPROM.commit();
+  
   DEBUG_PRINT("Function-End :: writeEEPROM");
 }
 
