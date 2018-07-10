@@ -8,7 +8,7 @@
 
 #include <EEPROM.h>
 #include <ESP8266WiFi.h>
-#include <MD5.h>
+#include <Hash.h>
 #include "Adafruit_Si7021.h"
 
 #define DEBUG
@@ -25,6 +25,7 @@
  */
 #define BAUDRATE 115200 
 #define EEPROM_SIZE 1024
+#define SALT "akddjuemv"
 #define WEBSERVER_PORT 80
 
 struct Configuration {
@@ -40,9 +41,11 @@ struct Configuration {
   int     serialNoSize    = 17;
   // Admin password
   String  passwdHash      = "";
-  int     passwdHashSize  = 12;
+  int     passwdHashSize  = 40;
 };
 Configuration sysconfig;
+
+String defaultPassword = "admin";
 
 // Sensor
 bool SensorFound = false;
@@ -66,7 +69,7 @@ void setup() {
   sysconfig.pskey = "";
   sysconfig.name  = "Unconfigured";
   sysconfig.serialNo = WiFi.macAddress();
-  sysconfig.passwdHash = "asdflkhjsdagtad";
+  sysconfig.passwdHash = sha1(SALT+defaultPassword);
   
   // Write deafult config to EEPROM
   DEBUG_PRINT("Writing default values to EEPROM . . .");
