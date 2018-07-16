@@ -1,30 +1,33 @@
 /*
- * Remote Temperature and Humidity Sendor
- * 
- * Read the temperature and humidy and submit it to 
- * a web server.
- */
+   Remote Temperature and Humidity Sendor
+
+   Read the temperature and humidy and submit it to
+   a web server.
+*/
 
 #include <EEPROM.h>
 
 #include <ESP8266WiFi.h>
-// #include <TimedAction.h>
+#include <ESP8266WebServer.h>
+// #include <WiFiClient.h>
+#include <TimedAction.h>
 #include <Hash.h>
 #include "Adafruit_Si7021.h"
+#include "user_interface.h"
 
 #define DEBUG
 
 #ifdef DEBUG
- #define DEBUG_PRINT(x)  Serial.println(x)
+#define DEBUG_PRINT(x)  Serial.println(x)
 #else
- #define DEBUG_PRINT(x)
+#define DEBUG_PRINT(x)
 #endif
 
 
-/* 
- *  Configuration and EEPROM settings
- */
-#define BAUDRATE 115200 
+/*
+    Configuration and EEPROM settings
+*/
+#define BAUDRATE 115200
 #define EEPROM_SIZE 1024
 #define SALT "akddjuemv"
 #define WEBSERVER_PORT 80
@@ -46,7 +49,25 @@ struct Configuration {
 };
 Configuration sysconfig;
 
+// Set default configuration values
+/*
+  sysconfig.ssid = "Sensor-Setup";
+  sysconfig.pskey = "";
+  sysconfig.name = "undefined";
+  sysconfig.serialNo = WiFi.macAddress();
 
+  String salted = strcat(SALT,"admin");
+  sysconfig.passwdHash = sha1( salted );
+*/
+
+// WiFi
+#define APMODE_SSID "Sensor-Setup"
+bool apMode = false;
+
+// IP Address for SoftAP
+IPAddress local_IP(192, 168, 4, 1);
+IPAddress gateway(192, 168, 4, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 // Sensor
 bool SensorFound = false;
@@ -56,10 +77,11 @@ int sensorTemp;
 int sensorHumidity;
 
 // Set times action
-//TimedAction = sensorThread( 30000, readSensors );
+void readSensor(void);
+TimedAction sensorThread = TimedAction(30000, readSensor);
 
 // Set web server port number to 80
-//WiFiServer server(80);
+ESP8266WebServer server( WEBSERVER_PORT );
 
 // Variable to store the HTTP request
 String header;
@@ -77,25 +99,41 @@ void setup() {
   // Read Configuration from EEPROM
   DEBUG_PRINT("Reading configuraiton from EEPROM . . .");
   readConfiguration();
-  
-  // Setup Wireless Network Connection
-//  connectWiFi();
 
+  // Setup Wireless Network Connection
+  DEBUG_PRINT("Connecting to WiFi . . ." );
+  connectWiFi();
+
+  // Set up Web Server
+  DEBUG_PRINT( "Setting up weberser . . ." );
+  server.on( "/", htmlRoot );
+  server.on( "/login", htmlLogin );
+  server.on( "/config", htmlConfig );
+  server.on( "/sensor", htmlSensor );
+
+  server.onNotFound( htmlError404 );
+
+  DEBUG_PRINT( "Staring webserver . . ." );
+  server.begin();
+
+
+  Serial.print("IP Address = " );
+  Serial.println( WiFi.softAPIP() );
+  
   DEBUG_PRINT("Function-End :: setup");
 }
 
 
 void loop() {
-  DEBUG_PRINT("Function-Begin :: loop");
-  
-  DEBUG_PRINT( "Reading sensor values . . .");
-  readSensors();
-  Serial.print("Humidity:    "); Serial.print(sensor.readHumidity(), 2);
-  Serial.print("\tTemperature: "); Serial.println(sensor.readTemperature(), 2);
-  
-  delay(100000);
+  // DEBUG_PRINT("Function-Begin :: loop");
 
-  DEBUG_PRINT("Function-End :: loop");
+  // DEBUG_PRINT("Is it time to check the sensor?");
+  sensorThread.check();
+  
+  // DEBUG_PRINT("Check for web client request . . .");
+  server.handleClient();
+  
+  // DEBUG_PRINT("Function-End :: loop");
 }
 
 //
@@ -105,15 +143,15 @@ void loop() {
 // Initialize Hardware Settings
 //
 void initHardware() {
- DEBUG_PRINT("Function-Begin :: initHardware");
- // put any hardware initialization code here:
-  
- //
- // Initialize serial output
- //
- DEBUG_PRINT("Setting baudrate . . ." );
- Serial.begin(BAUDRATE);
-  
+  DEBUG_PRINT("Function-Begin :: initHardware");
+  // put any hardware initialization code here:
+
+  //
+  // Initialize serial output
+  //
+  DEBUG_PRINT("Setting baudrate . . ." );
+  Serial.begin(BAUDRATE);
+
   // wait for serial port to open
   DEBUG_PRINT("Waiting for serial port to intialize . . .");
   while (!Serial) {
@@ -131,7 +169,7 @@ void initHardware() {
   //
   // Check for sensor
   //
-  DEBUG_PRINT( "Checking for Si7021 sensor . . ." ); 
+  DEBUG_PRINT( "Checking for Si7021 sensor . . ." );
   if (!sensor.begin()) {
     Serial.println("Did not find Si7021 sensor!");
     // Hang if not found
@@ -150,30 +188,30 @@ void readConfiguration() {
 
   String debug_msg;
   int memlocation = 0;
-  
+
   // Wireless config
   DEBUG_PRINT( "Reading SSID . . ." );
   sysconfig.ssid = readEEPROM( memlocation, sysconfig.ssidSize );
   debug_msg = "SSD = [" + sysconfig.ssid + "]";
   DEBUG_PRINT( debug_msg );
-  
+
   memlocation = memlocation + 1 + sysconfig.ssidSize;
   DEBUG_PRINT( "Reading PSK . . ." );
-  sysconfig.pskey = readEEPROM( memlocation,sysconfig.pskeySize );
-  debug_msg ="PSK = [" + sysconfig.pskey + "]";
+  sysconfig.pskey = readEEPROM( memlocation, sysconfig.pskeySize );
+  debug_msg = "PSK = [" + sysconfig.pskey + "]";
   DEBUG_PRINT( debug_msg );
-  
+
   // Device Info
   memlocation = memlocation + 1 + sysconfig.pskeySize;
   DEBUG_PRINT( "Reading sensor name . . ." );
   sysconfig.name = readEEPROM( memlocation, sysconfig.nameSize );
   debug_msg = "Sensor Name = [" + sysconfig.name + "]";
   DEBUG_PRINT( debug_msg );
-  
+
   memlocation = memlocation + 1 + sysconfig.nameSize;
   DEBUG_PRINT( "Reading serial number . . ." );
   sysconfig.serialNo = readEEPROM( memlocation, sysconfig.serialNoSize );
-  debug_msg = "Serial No. : [" + sysconfig.serialNo +"]";
+  debug_msg = "Serial No. : [" + sysconfig.serialNo + "]";
   DEBUG_PRINT( debug_msg );
   memlocation = memlocation + 1 + sysconfig.serialNoSize;
 
@@ -190,13 +228,13 @@ void saveConfiguration() {
   // Save the configuration to EEPROM
 
   int memlocation = 0;
-  
+
   // Wireless config
   DEBUG_PRINT( "Writing SSID . . ." );
-  writeEEPROM( memlocation, sysconfig.ssidSize,sysconfig.ssid );
+  writeEEPROM( memlocation, sysconfig.ssidSize, sysconfig.ssid );
   memlocation = memlocation + 1 + sysconfig.ssidSize;
   DEBUG_PRINT( "Writing PSK . . ." );
-  writeEEPROM( memlocation,sysconfig.pskeySize,sysconfig.pskey );
+  writeEEPROM( memlocation, sysconfig.pskeySize, sysconfig.pskey );
   memlocation = memlocation + 1 + sysconfig.pskeySize;
 
   // Device Info
@@ -214,8 +252,8 @@ void saveConfiguration() {
   // Commit EEPROM
   DEBUG_PRINT("Commiting EEPROM changes . . ." );
   EEPROM.commit();
-  
-  DEBUG_PRINT("Function-End :: saveConfiguration"); 
+
+  DEBUG_PRINT("Function-End :: saveConfiguration");
 }
 
 String readEEPROM (int start, int size ) {
@@ -223,14 +261,14 @@ String readEEPROM (int start, int size ) {
   String  retString;
   int     memcount = start;
   char    c;
-  
-  for( int i = memcount; i < (memcount+size); i++ ) {
-     c = EEPROM.read( i );
-     if ( c != 0 ) {
+
+  for ( int i = memcount; i < (memcount + size); i++ ) {
+    c = EEPROM.read( i );
+    if ( c != 0 ) {
       retString += (c);
-     } else {
+    } else {
       break;
-     }
+    }
   }
 
   return retString;
@@ -242,11 +280,11 @@ void writeEEPROM( int start, int size, String value ) {
   DEBUG_PRINT( start );
   DEBUG_PRINT( size );
   DEBUG_PRINT( value );
-  for (int i=0; i<(value.length()<size?value.length():size); i++) {
-    EEPROM.write(start+i,value.charAt(i));
+  for (int i = 0; i < (value.length() < size ? value.length() : size); i++) {
+    EEPROM.write(start + i, value.charAt(i));
   }
-  
-  EEPROM.write( start + (value.length()<size?value.length():size), 0 );
+
+  EEPROM.write( start + (value.length() < size ? value.length() : size), 0 );
 
   DEBUG_PRINT( "Commiting EEPROM changes." );
   EEPROM.commit();
@@ -255,13 +293,173 @@ void writeEEPROM( int start, int size, String value ) {
   DEBUG_PRINT( "Verifying EEPROM value saved . . ." );
   String verified = readEEPROM( start, size );
   DEBUG_PRINT( verified );
-  
+
   DEBUG_PRINT("Function-End :: writeEEPROM");
 }
 
-void readSensors() {
-  sensorTemp = sensor.readTemperature();
-  sensorHumidity = sensor.readTemperature();
+//
+// Connect to WiFi network or run in AP mode
+//
+void connectWiFi() {
+  if ( sysconfig.ssid == APMODE_SSID ) {
+    apMode = true;
+    const char *ssid;
+    ssid = sysconfig.ssid.c_str();
+    // Start up in AP mode so sensor can be configured
+    // wifi_softap_set_dhcps_offer_option(OFFER_ROUTER, 0 );
+    Serial.println("Set soft-AP configuration . . . ");
+    WiFi.mode(WIFI_AP_STA);
+    Serial.println(WiFi.softAPConfig(local_IP, gateway, subnet) ? "Ready" : "Failed!");
+
+    Serial.print("Starting softAP . . . ");
+    Serial.println( WiFi.softAP( ssid ) ? "Ready" : "Failed!");
+    Serial.print("Soft-AP IP address = ");
+    Serial.println(WiFi.softAPIP());
+  } else {
+    // Connect to the WiFi Network
+    Serial.println("Connecting to the WiFi network . . .");
+    Serial.print("SSID :: ");
+    Serial.println( sysconfig.ssid );
+    Serial.print("PSK  :: ");
+    Serial.println( sysconfig.pskey );
+    if ( sysconfig.pskey = "" ) {
+      WiFi.begin( sysconfig.ssid.c_str() );
+    } else {
+      WiFi.begin( sysconfig.ssid.c_str() , sysconfig.pskey.c_str() );
+    }
+
+
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+
+    Serial.print("IP address = ");
+    Serial.println(WiFi.localIP());
+  }
 }
 
+// Read the sensor and send info to server
+void readSensor() {
+  DEBUG_PRINT("Function-Begin :: sensorThread");
+  sensorTemp = sensor.readTemperature();
+  sensorHumidity = sensor.readTemperature();
+
+  Serial.print("Humidity:    "); Serial.print(sensor.readHumidity(), 2);
+  Serial.print("\tTemperature: "); Serial.println(sensor.readTemperature(), 2);
+
+  // Send the sensor reading to server if we are supposed to.
+
+  DEBUG_PRINT("Function-End :: sensorThread");
+}
+
+// Display an HTML error 404 - File not Found
+void htmlError404() {
+  DEBUG_PRINT("Function-Begin :: htmlError404");
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += ( server.method() == HTTP_GET ) ? "GET" : "POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+
+  for ( uint8_t i = 0; i < server.args(); i++ ) {
+    message += " " + server.argName ( i ) + ": " + server.arg ( i ) + "\n";
+  }
+
+  server.send ( 404, "text/plain", message );
+
+  DEBUG_PRINT("Function-End :: htmlError404");
+
+}
+
+// Root web page
+void htmlRoot() {
+  DEBUG_PRINT("Function-Begin :: htmlRoot");
+
+  String html  = htmlPageOpen();
+  html += htmlHEAD( "Sensor Setup" );
+  html += "Hello world!!";
+  html += htmlPageClose();
+
+  DEBUG_PRINT( html );
+
+  server.send ( 200, "text/html", html );
+  DEBUG_PRINT("Function-End :: htmlRoot");
+
+}
+
+// Login Web Page
+void htmlLogin() {
+  DEBUG_PRINT("Function-Begin :: htmlLogin");
+  DEBUG_PRINT("Function-End :: htmlLogin");
+
+}
+
+// Configuraiton Webpage
+void htmlConfig() {
+  DEBUG_PRINT("Function-Begin :: htmlConfig");
+  DEBUG_PRINT("Function-End :: htmlConfig");
+
+}
+
+// Sensor Webpage - display the current sensor readings
+void htmlSensor() {
+  DEBUG_PRINT("Function-Begin :: htmlSensor");
+
+  // Construct WebPage
+  String message;
+  
+  DEBUG_PRINT("Function-End :: htmlSensor");
+}
+
+String htmlPageOpen() {
+  DEBUG_PRINT("Function-Begin :: htmlPageOpen");
+  String retStr  = "<!DOCTYPE html>";
+  retStr += "<HTML>";
+
+  return retStr;
+  DEBUG_PRINT("Function-End :: htmlPageopen");
+}
+
+String htmlPageClose() {
+  DEBUG_PRINT("Function-Begin :: htmlPageClose");
+  return "</BODY></HTML>";
+  DEBUG_PRINT("Function-End :: htmlPageClose");
+}
+
+String htmlHEAD( String pageTitle ) {
+  DEBUG_PRINT("Function-Begin :: htmlHEAD");
+  String  retStr  = "<HEAD>";
+  retStr += "<TITLE>" + pageTitle + "</TITLE>";
+  retStr += "<meta charset=\"UTF-8\">";
+  retStr += "<meta name=\"description\" content=\"SensorSetup\">";
+  retStr += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
+  retStr += "<meta http-equiv=\"refresh\" content=\"30\">";
+  // Insert style here
+  retStr += "</HEAD>";
+  retStr += "<BODY>";
+
+  return retStr;
+
+  DEBUG_PRINT("Function-End :: htmlHEAD");
+}
+
+String htmlPageHeader() {
+  DEBUG_PRINT("Function-Begin :: htmlPageHeader");
+  String retStr  = "";
+
+  return retStr;
+  DEBUG_PRINT("Function-End :: htmlPageHeader");
+}
+
+String htmlPageFooter() {
+  DEBUG_PRINT("Function-Begin :: htmlPageFooter");
+  String retStr  = "";
+
+  return retStr;
+  DEBUG_PRINT("Function-End :: htmlFooter");
+}
 
