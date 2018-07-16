@@ -394,6 +394,27 @@ void htmlRoot() {
 // Login Web Page
 void htmlLogin() {
   DEBUG_PRINT("Function-Begin :: htmlLogin");
+  String html  = htmlPageOpen();
+         html += htmlHEAD( "Sensor Setup" );
+         html += "<div class=\"wrap\">";
+         html += "<div class=\"avatar\">";
+         // html += "<img src=\"http://cdn.ialireza.me/avatar.png\">";
+         html += "</div>";
+         html += "<input type=\"text\" placeholder=\"username\" required>";
+         html += "<div class=\"bar\">";
+         html += "<i></i>";
+         html += "</div>";
+         html += "<input type=\"password\" placeholder=\"password\" required>";
+         html += "<a href=\"\" class=\"forgot_link\">forgot ?</a>";
+         html += "<button>Sign in</button>";
+         html += "</div>";
+         html += htmlPageClose();
+
+  DEBUG_PRINT( html );
+
+  server.send ( 200, "text/html", html );
+
+  
   DEBUG_PRINT("Function-End :: htmlLogin");
 
 }
@@ -439,6 +460,96 @@ String htmlHEAD( String pageTitle ) {
   retStr += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
   retStr += "<meta http-equiv=\"refresh\" content=\"30\">";
   // Insert style here
+  retStr += "<STYLE>";
+  retStr += "@font-face {";
+  retStr += "font-family: 'Lato';";
+  retStr += "font-style: normal;";
+  retStr += "font-weight: 400;";
+  retStr += "src: local('Lato Regular'), local('Lato-Regular'), url(http://themes.googleusercontent.com/static/fonts/lato/v7/qIIYRU-oROkIk8vfvxw6QvesZW2xOQ-xsNqO47m55DA.woff) format('woff');";
+  retStr += "}";
+  retStr += "body {";
+  retStr += "background: #448ed3 ;";
+  retStr += "font-family: 'Lato' ;";
+  retStr += "}";
+  retStr += ".wrap {";
+  retStr += "width:250px;";
+  retStr += "height: auto;";
+  retStr += "margin: auto;";
+  retStr += "margin-top: 10%;";
+retStr += "}";
+retStr += ".avatar {";
+  retStr += "width: 100%;";
+  retStr += "margin: auto;";
+  retStr += "width: 65px;";
+  retStr += "border-radius: 100px;";
+  retStr += "height: 65px;";
+  retStr += "background: #448ed3 ;";
+  retStr += "position: relative;";
+  retStr += "bottom: -15px;";
+  retStr += "}";
+  retStr += ".avatar img {";
+  retStr += "width: 55px;";
+  retStr += "height: 55px;";
+  retStr += "border-radius: 100px;";
+  retStr += "margin: auto;";
+  retStr += "border:3px solid #fff;";
+  retStr += "display: block;";
+  retStr += "}";
+  retStr += ".wrap input {";
+  retStr += "border: none;";
+  retStr += "background: #fff;";
+  retStr += "font-family:Lato ;";
+  retStr += "font-weight:700 ;";
+  retStr += "display: block;";
+  retStr += "height: 40px;";
+  retStr += "outline: none;";
+  retStr += "width: calc(100% - 24px) ;";
+  retStr += "margin: auto;";
+  retStr += "padding: 6px 12px 6px 12px;";
+  retStr += "}";
+  retStr += ".bar {";
+  retStr += "width: 100%;";
+  retStr += "height: 1px;";
+  retStr += "background: #fff ;";
+  retStr += "}";
+  retStr += ".bar i {";
+  retStr += "width: 95%;";
+  retStr += "margin: auto;";
+  retStr += "height: 1px ;";
+  retStr += "display: block;";
+  retStr += "background: #d1d1d1;";
+  retStr += "}";
+  retStr += ".wrap input[type='text'] {";
+  retStr += "border-radius: 7px 7px 0px 0px ;";
+  retStr += "}";
+  retStr += ".wrap input[type='password'] {";
+  retStr += "border-radius: 0px 0px 7px 7px ;";
+  retStr += "}";
+  retStr += ".forgot_link {";
+  retStr += "color: #83afdf ;";
+  retStr += "color: #83afdf;";
+  retStr += "text-decoration: none;";
+  retStr += "font-size: 11px;";
+  retStr += "position: relative;";
+  retStr += "left: 193px;";
+  retStr += "top: -36px;";
+  retStr += "}";
+  retStr += ".wrap button {";
+  retStr += "width: 100%;";
+  retStr += "border-radius: 7px;";
+  retStr += "background: #b6ee65;";
+  retStr += "text-decoration: center;";
+  retStr += "border: none;";
+  retStr += "color: #51771a;";
+  retStr += "margin-top:-5px;";
+  retStr += "padding-top: 14px;";
+  retStr += "padding-bottom: 14px;";
+  retStr += "outline: none;";
+  retStr += "font-size: 13px;";
+  retStr += "border-bottom: 3px solid #307d63;";
+  retStr += "cursor: pointer;";
+  retStr += "}";
+  retStr += "</STYLE>";
   retStr += "</HEAD>";
   retStr += "<BODY>";
 
