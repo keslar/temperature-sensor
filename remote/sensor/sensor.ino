@@ -12,6 +12,7 @@
 // #include <WiFiClient.h>
 #include <TimedAction.h>
 #include <Hash.h>
+#include <FS.h>
 #include "Adafruit_Si7021.h"
 #include "user_interface.h"
 
@@ -83,6 +84,11 @@ TimedAction sensorThread = TimedAction(30000, readSensor);
 // Set web server port number to 80
 ESP8266WebServer server( WEBSERVER_PORT );
 
+void handleRoot(){
+  server.sendHeader("Location", "/index.html",true);   //Redirect to our html web page
+  server.send(302, "text/plane","");
+}
+
 // Variable to store the HTTP request
 String header;
 
@@ -104,14 +110,19 @@ void setup() {
   DEBUG_PRINT("Connecting to WiFi . . ." );
   connectWiFi();
 
+  SPIFFS.begin();
+  Serial.println("File System Initialized");
+
   // Set up Web Server
   DEBUG_PRINT( "Setting up weberser . . ." );
+  server.onNotFound(handleWebRequests);
   server.on( "/", htmlRoot );
   server.on( "/login", htmlLogin );
   server.on( "/config", htmlConfig );
   server.on( "/sensor", htmlSensor );
+  server.on( "/save", handleSave );
 
-  server.onNotFound( htmlError404 );
+  // server.onNotFound( htmlError404 );
 
   DEBUG_PRINT( "Staring webserver . . ." );
   server.begin();
@@ -353,6 +364,47 @@ void readSensor() {
   DEBUG_PRINT("Function-End :: sensorThread");
 }
 
+bool loadFromSpiffs(String path){
+  String dataType = "text/plain";
+  if(path.endsWith("/")) path += "index.htm";
+ 
+  if(path.endsWith(".src")) path = path.substring(0, path.lastIndexOf("."));
+  else if(path.endsWith(".html")) dataType = "text/html";
+  else if(path.endsWith(".htm")) dataType = "text/html";
+  else if(path.endsWith(".css")) dataType = "text/css";
+  else if(path.endsWith(".js")) dataType = "application/javascript";
+  else if(path.endsWith(".png")) dataType = "image/png";
+  else if(path.endsWith(".gif")) dataType = "image/gif";
+  else if(path.endsWith(".jpg")) dataType = "image/jpeg";
+  else if(path.endsWith(".ico")) dataType = "image/x-icon";
+  else if(path.endsWith(".xml")) dataType = "text/xml";
+  else if(path.endsWith(".pdf")) dataType = "application/pdf";
+  else if(path.endsWith(".zip")) dataType = "application/zip";
+  File dataFile = SPIFFS.open(path.c_str(), "r");
+  if (server.hasArg("download")) dataType = "application/octet-stream";
+  if (server.streamFile(dataFile, dataType) != dataFile.size()) {
+  }
+ 
+  dataFile.close();
+  return true;
+}
+
+void handleWebRequests(){
+  if(loadFromSpiffs(server.uri())) return;
+  String message = "File Not Detected\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET)?"GET":"POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  for (uint8_t i=0; i<server.args(); i++){
+    message += " NAME:"+server.argName(i) + "\n VALUE:" + server.arg(i) + "\n";
+  }
+  server.send(404, "text/plain", message);
+  Serial.println(message);
+}
 // Display an HTML error 404 - File not Found
 void htmlError404() {
   DEBUG_PRINT("Function-Begin :: htmlError404");
@@ -368,9 +420,9 @@ void htmlError404() {
   for ( uint8_t i = 0; i < server.args(); i++ ) {
     message += " " + server.argName ( i ) + ": " + server.arg ( i ) + "\n";
   }
-
+  DEBUG_PRINT( message );
   server.send ( 404, "text/plain", message );
-
+  
   DEBUG_PRINT("Function-End :: htmlError404");
 
 }
@@ -391,32 +443,110 @@ void htmlRoot() {
 
 }
 
+bool isAuthenticated() {
+  DEBUG_PRINT("Function-Begin :: isAuthenticated");
+  if (server.hasHeader("Cookie")) {
+    Serial.print("Found cookie: ");
+    String cookie = server.header("Cookie");
+    Serial.println(cookie);
+    if (cookie.indexOf("ESPSESSIONID=1") != -1) {
+      Serial.println("Authentification Successful");
+      return true;
+    }
+  }
+  Serial.println("Authentification Failed");
+  
+  DEBUG_PRINT("Function-End :: isAuthenticated");
+  return false;
+  
+}
+
+void htmlLoginPage( String msg ) {
+      // Displasy Login Page
+      String html  = htmlPageOpen();
+             html += htmlHEAD( "Sensor Setup" );
+             html += "<div class=\"wrap\">";
+             html += "<div class=\"avatar\">";
+             html += "<img src=\"sensor.png\">";
+             html += "</div>";
+             html += "<form id=\"login\" action=\"login\" method=\"put\">";
+             html += "<input type=\"text\" name=\"username\" placeholder=\"username\" required>";
+             html += "<div class=\"bar\">";
+             html += "<i></i>";
+             html += "</div>";
+             html += "<input type=\"password\" name=\"password\" placeholder=\"password\" required>";
+             html += "<a href=\"\" class=\"forgot_link\">forgot ?</a>";
+             // html += "<button onclick=\"document.getElementById('login').submit()\">Sign in</button>";
+             html += "<input type=\"submit\" value=\"Sign in\">";
+             html += "</form>";
+             html += "</div>";
+             html += htmlPageClose();
+
+      DEBUG_PRINT( html );
+      server.send ( 200, "text/html", html );
+}
+
+
 // Login Web Page
 void htmlLogin() {
   DEBUG_PRINT("Function-Begin :: htmlLogin");
-  String html  = htmlPageOpen();
-         html += htmlHEAD( "Sensor Setup" );
-         html += "<div class=\"wrap\">";
-         html += "<div class=\"avatar\">";
-         // html += "<img src=\"http://cdn.ialireza.me/avatar.png\">";
-         html += "</div>";
-         html += "<input type=\"text\" placeholder=\"username\" required>";
-         html += "<div class=\"bar\">";
-         html += "<i></i>";
-         html += "</div>";
-         html += "<input type=\"password\" placeholder=\"password\" required>";
-         html += "<a href=\"\" class=\"forgot_link\">forgot ?</a>";
-         html += "<button>Sign in</button>";
-         html += "</div>";
-         html += htmlPageClose();
 
-  DEBUG_PRINT( html );
-
-  server.send ( 200, "text/html", html );
+  String message;
+  for (int i = 0; i < server.args(); i++) {
+    message += "Arg no" + (String)i + " –> ";
+    message += server.argName(i) + ": ";
+    message += server.arg(i) + "\n";
+  } 
+  Serial.println("Server Arguments");
+  Serial.println("================");
+  Serial.println( message );
+  
+  if ( isAuthenticated() ) {
+    server.sendHeader("Location", "/");
+    server.sendHeader("Cache-Control", "no-cache");
+    server.sendHeader("Set-Cookie", "ESPSESSIONID=1");
+    server.send(301);
+    Serial.println("Already logged in.");
+  } else if (server.hasArg("username") && server.hasArg("password")) {
+    Serial.println( server.arg("password"));
+    String salted = SALT+server.arg("password");
+    Serial.println( salted );
+    String hashedPassword = sha1( salted );
+    Serial.println( hashedPassword );
+    if ((server.arg("username") == "Admin") && (sysconfig.passwdHash == hashedPassword)) {
+      server.sendHeader("Location", "/");
+      server.sendHeader("Cache-Control", "no-cache");
+      server.sendHeader("Set-Cookie", "ESPSESSIONID=1");
+      server.send(301);
+      Serial.println("Log in Successful");
+      return;    
+    } else {
+      Serial.println("Wrong password or username");
+      htmlLoginPage("Authentication failed.");
+    }
+  } else {
+    htmlLoginPage("");
+  }
 
   
   DEBUG_PRINT("Function-End :: htmlLogin");
 
+}
+
+void handleSave() {
+  String str= "Settings Saved ...\r\n";
+
+  Serial.print("Number of args: ");
+  Serial.println(server.args());
+  Serial.print("Argument(0): ");
+  Serial.println(server.arg(0));
+  
+  if (server.args() > 0 ) {
+    for ( uint8_t i = 0; i < server.args(); i++ ) {
+      str += server.argName(i) + " = " + server.arg(i) + "\r\n";
+    }
+  }
+  server.send(200, "text/plain", str.c_str());
 }
 
 // Configuraiton Webpage
@@ -458,7 +588,7 @@ String htmlHEAD( String pageTitle ) {
   retStr += "<meta charset=\"UTF-8\">";
   retStr += "<meta name=\"description\" content=\"SensorSetup\">";
   retStr += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">";
-  retStr += "<meta http-equiv=\"refresh\" content=\"30\">";
+  // retStr += "<meta http-equiv=\"refresh\" content=\"30\">";
   // Insert style here
   retStr += "<STYLE>";
   retStr += "@font-face {";
@@ -573,4 +703,12 @@ String htmlPageFooter() {
   return retStr;
   DEBUG_PRINT("Function-End :: htmlFooter");
 }
+
+// Redirect to specified page
+void htmlRedirect( String page ) {
+  server.sendHeader("Location", String( page ), true);
+  server.send ( 302, "text/plain", "");
+}
+
+// Check if header is present and correct
 
