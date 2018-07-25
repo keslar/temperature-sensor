@@ -5,6 +5,7 @@
  * 
  */
 #include "api.h"
+#include <ESP8266WebServer.h>
 
 String dataType = "text/json";
 
@@ -13,7 +14,7 @@ String dataType = "text/json";
 void initAPI( ESP8266WebServer *server ) {
   webserver = server;
   
-  server->on("/sensor", getSensor );
+  server->on("/sensor", getSensors );
   server->on("/sensor/1", getSensor1 );
   server->on("/sensor/2", getSensor2 );
 
