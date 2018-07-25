@@ -9,9 +9,12 @@
 #include "setup.h"
 #include "MyWiFi.h"
 #include "WebServer.h"
+#include "api.h"
 
 struct SensorObj Sensor;
 struct Configuration Device;
+
+ESP8266WebServer *server;
 
 void setup() {
   DEBUG_PRINT("Function-Begin :: setup()");
@@ -25,8 +28,16 @@ void setup() {
 
   // Connect to WiFi Network or Start up in AP mode
   initWiFi( Device.ssid, Device.pskey );
+
+  // Set Time from NTP
+  setTime();
+  
   
   // Setup Web Server
+  initWebServer( server );
+
+  // Setup web API URI's
+ // initAPI( webserver );
     
   DEBUG_PRINT("Function-End :: setup()");
 }
